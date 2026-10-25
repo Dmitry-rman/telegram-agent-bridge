@@ -1,5 +1,7 @@
 # Architecture and delivery
 
+Start with [runtime topology](runtime-topology.md) for where Workers, the native listener, root assistant and offline transcription actually run, plus the full sequence and latency boundaries. This page specifies transport/storage behavior.
+
 ## Polling
 
 The assistant calls `poll_telegram`, or `wait_for_message` during an active session. The bridge calls official Telegram `getUpdates`, validates the paired numeric sender/private chat, and commits inbox plus cursor before advancing. A 120-second database lease prevents overlapping fetches. Long polling uses Telegram's bounded wait and does not wake a dormant assistant. Honor sanitized rate-limit delays.
@@ -38,3 +40,9 @@ Protocol key-domain constants retain their original version strings for compatib
 ### Bounded typing renewal
 
 The private `keep_typing` tool holds one authenticated request for 20 seconds by default (1–25 seconds allowed). It renews `sendChatAction` about every four seconds only for a known owner message without an outbox attempt. The caller must run it concurrently with actual assistant processing, cancel it when processing stops, and start another bounded call only if processing continues. It does not wake the assistant or run after the request ends. Every renewal checks the outbox and stops for sending, sent, or uncertain replies. Cancellation stops further requests; Telegram may display the last action for up to five more seconds. Rate limiting ends the call with `retry_after_seconds`, which callers must honor before another typing action. Unconfirmed actions are not retried within the call. No continuous typing is promised during network failures or between calls.
+
+### Optional import-time typing
+
+`TYPING_ON_IMPORT=true` opts the private importer into one nonblocking 20-second renewal for the latest eligible owner message in a batch. Enable only when importing means the same assistant is starting actual processing, not for an unattended queue watcher. The response includes `typing.scheduled`, the selected update ID and `lease_until_ms`; callers must not start another typing loop during that lease. The durable `typing_runs` table atomically prevents overlapping importer renewals and repeated imports from restarting the same update. Rate-limit cooldowns survive requests. Ordinary typing tools defer to active importer leases, and a held manual call rechecks before every renewal. A tiny in-flight action race remains possible when a manual action began before the import lease; do not intentionally run concurrent loops.
+
+The importer registers the bounded promise with the actual Worker execution context, not a floating task. [Cloudflare documents up to 30 seconds of `waitUntil` execution after response or disconnect](https://developers.cloudflare.com/workers/runtime-apis/context/); this is best-effort, not a scheduler or guarantee of continuous display. Replies stop renewals through the existing outbox checks. An abandoned lease expires in 25 seconds. Missing execution context or the default-off flag schedules nothing. No token enters the public receiver, and no new public route is added.

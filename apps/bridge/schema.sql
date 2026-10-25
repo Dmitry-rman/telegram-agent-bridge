@@ -5,3 +5,4 @@ CREATE TABLE credentials(id INTEGER PRIMARY KEY CHECK(id=1),sealed TEXT NOT NULL
 CREATE TABLE notifications(key TEXT PRIMARY KEY,digest TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN ('sending','sent','uncertain')),telegram_message_id INTEGER,created_at INTEGER NOT NULL DEFAULT (unixepoch()));
 CREATE TABLE bridge_transport(id INTEGER PRIMARY KEY CHECK(id=1),mode TEXT NOT NULL DEFAULT 'polling' CHECK(mode IN ('polling','switching','webhook')));
 CREATE TABLE webhook_receipts(update_id INTEGER PRIMARY KEY);
+CREATE TABLE typing_runs(update_id INTEGER PRIMARY KEY,lease_until INTEGER NOT NULL DEFAULT 0,cooldown_until INTEGER NOT NULL DEFAULT 0);

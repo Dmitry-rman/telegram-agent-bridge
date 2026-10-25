@@ -2,7 +2,7 @@
 
 ## Goal and boundaries
 
-This monorepo connects Telegram to the **same existing assistant**, not a replacement AI. It is a single-owner starter with a host-specific private MCP adapter. Read [README](README.md), then [architecture](docs/architecture.md) and [security](docs/security.md) before changing behavior.
+This monorepo connects Telegram to the **same existing assistant**, not a replacement AI. It is a single-owner starter with a host-specific private MCP adapter. Read [README](README.md), then [runtime topology](docs/runtime-topology.md), [architecture](docs/architecture.md) and [security](docs/security.md) before changing behavior.
 
 ## Map
 

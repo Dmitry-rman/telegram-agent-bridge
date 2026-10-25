@@ -15,3 +15,4 @@ export const notifications=sqliteTable('notifications',{
 },t=>[check('notification_state',sql`${t.state} IN ('sending','sent','uncertain')`)]);
 export const transport=sqliteTable('bridge_transport',{id:integer('id').primaryKey(),mode:text('mode').notNull().default('polling')},t=>[check('transport_singleton',sql`${t.id}=1`),check('transport_mode',sql`${t.mode} IN ('polling','switching','webhook')`)]);
 export const webhookReceipts=sqliteTable('webhook_receipts',{updateId:integer('update_id').primaryKey()});
+export const typingRuns=sqliteTable('typing_runs',{updateId:integer('update_id').primaryKey(),leaseUntil:integer('lease_until').notNull().default(0),cooldownUntil:integer('cooldown_until').notNull().default(0)});

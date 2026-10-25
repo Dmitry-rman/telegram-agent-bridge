@@ -5,16 +5,22 @@ A single-owner Telegram transport for an **existing assistant**, with an optiona
 **Status:** reusable source starter, not a one-click universal AI integration. The included hosting adapter targets OpenAI Sites / Cloudflare Workers + D1 and its trusted owner-identity boundary. Other hosts and assistant providers require adapters and authentication review. No deployed resources, credentials, user data, model weights or production registration are included.
 
 ```text
-Telegram ── polling ───────────────────────────────┐
-         └─ webhook → ingress / encrypted queue ──┤
-                                                  ↓
-                     same assistant ← MCP → private bridge / inbox
-                           │                        │
-                           ├─ optional offline STT  └─ Telegram replies
-                           └─ its existing context and permissions
+Telegram -> public Cloudflare Worker -> encrypted ingress D1
+                                               |
+                            active native transport task reads/imports
+                                               |
+                            private Cloudflare Worker -> private inbox
+                                               |
+                            host task handoff -> SAME root assistant
+                                               |
+                            private send_reply -> Telegram
+
+Voice: private download -> temporary cloud executor -> offline ASR -> root
 ```
 
-Webhook receipt is immediate queueing, **not guaranteed assistant wake-up**. Processing depends on an active assistant session or the host's explicitly configured scheduler. Nothing here installs a scheduler or an always-on agent.
+Both Workers run on Cloudflare infrastructure through separate OpenAI Sites deployments, not on the user's computer or inside the chat model. The native listener and root assistant run in the assistant host; offline voice transcription runs in a separate trusted cloud executor.
+
+**The webhook does not directly wake root.** The current reference setup uses active native queue reads and a listener-to-root handoff, not a fully event-driven consumer and not a ten-minute automation. Nothing here installs a scheduler or guarantees an always-on listener. See the [detailed runtime topology, message sequence and latency explanation](docs/runtime-topology.md).
 
 ## Layout
 

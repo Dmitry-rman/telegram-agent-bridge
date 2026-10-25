@@ -82,3 +82,23 @@ test('held typing honors429 with no retry and sanitizes unconfirmed failures',as
  const limited=await keepTyping(env,r,{update_id:1},async()=>{calls++;throw Object.assign(Error('SECRET upstream'),{code:'RATE_LIMIT',retryAfter:9});});assert.equal(limited.reason,'rate_limited');assert.equal(limited.retry_after_seconds,9);assert.equal(calls,1);assert.ok(!JSON.stringify(limited).includes('SECRET'));
  assert.equal((await keepTyping(env,r,{update_id:1},async()=>{throw Error('SECRET');})).reason,'not_confirmed');assert.equal((await keepTyping(env,r,{update_id:1},async()=>false)).reason,'not_confirmed');
 });
+test('import typing is opt-in, requires execution context and returns before bounded work completes',async()=>{
+ const {startImportTyping}=await import('../worker/index.js');const r=new Repo(db());await poll(env,r,async()=>[message(1)]);let run=0,release;const held=new Promise(resolve=>{release=resolve;});const tasks=[];const ctx={waitUntil(p){tasks.push(p);}};const runner=async(e,repo,args,api,options)=>{run++;assert.equal(args.duration_seconds,20);assert.equal(options.importLease,true);await held;return {reason:'duration_elapsed'};};
+ assert.equal((await startImportTyping(env,r,[{update_id:1}],ctx,runner)).reason,'disabled');assert.equal((await startImportTyping({...env,TYPING_ON_IMPORT:'true'},r,[{update_id:1}],undefined,runner)).reason,'execution_context_unavailable');assert.equal(run,0);
+ const result=await startImportTyping({...env,TYPING_ON_IMPORT:'true'},r,[{update_id:1}],ctx,runner);assert.equal(result.scheduled,true);assert.equal(run,1);assert.equal(tasks.length,1);assert.ok(result.lease_until_ms>Date.now());release();await Promise.all(tasks);assert.equal((await r.first('SELECT lease_until FROM typing_runs')).lease_until,0);
+ assert.equal((await startImportTyping({...env,TYPING_ON_IMPORT:'true'},r,[{update_id:1}],ctx,runner)).reason,'already_started');assert.equal(run,1);
+});
+test('durable import typing lease prevents concurrent batches and manual renewal overlap',async()=>{
+ const {startImportTyping,sendTyping,keepTyping}=await import('../worker/index.js');const r=new Repo(db());await poll(env,r,async()=>[message(1),message(2)]);const e={...env,TYPING_ON_IMPORT:'true'},tasks=[];let release;const held=new Promise(resolve=>{release=resolve;});const ctx={waitUntil(p){tasks.push(p);}};let count=0;const runner=async()=>{count++;await held;return {reason:'duration_elapsed'};};
+ const results=await Promise.all([startImportTyping(e,r,[{update_id:1},{update_id:2}],ctx,runner),startImportTyping(e,r,[{update_id:1}],ctx,runner)]);assert.equal(results.filter(x=>x.scheduled).length,1);assert.equal(results[0].update_id,2);assert.equal(count,1);
+ const forbidden=async()=>assert.fail('Lease must block manual action');assert.equal((await sendTyping(env,r,{update_id:1},forbidden)).reason,'import_typing_active');assert.equal((await keepTyping(env,r,{update_id:1},forbidden)).reason,'import_typing_active');release();await Promise.all(tasks);
+});
+test('import typing persists rate-limit cooldown and failure releases lease without retry',async()=>{
+ const {startImportTyping,sendTyping}=await import('../worker/index.js');const r=new Repo(db());await poll(env,r,async()=>[message(1),message(2)]);const e={...env,TYPING_ON_IMPORT:'true'},tasks=[],ctx={waitUntil(p){tasks.push(p);}};
+ await startImportTyping(e,r,[{update_id:1}],ctx,async()=>({reason:'rate_limited',retry_after_seconds:9}));await Promise.all(tasks);assert.equal((await sendTyping(env,r,{update_id:2},async()=>assert.fail())).reason,'rate_limited');assert.equal((await startImportTyping(e,r,[{update_id:2}],ctx)).reason,'rate_limited');
+ await r.run('UPDATE typing_runs SET cooldown_until=0');await startImportTyping(e,r,[{update_id:2}],ctx,async()=>{throw Error('SECRET');});await Promise.all(tasks);assert.equal((await r.first('SELECT lease_until FROM typing_runs WHERE update_id=2')).lease_until,0);assert.equal((await startImportTyping(e,r,[{update_id:2}],ctx)).reason,'already_started');
+});
+
+test('import typing absolute deadline cannot outlive its durable lease after slow setup',async()=>{
+ const {keepTyping}=await import('../worker/index.js');const r=new Repo(db());await poll(env,r,async()=>[message(1)]);let calls=0;const out=await keepTyping(env,r,{update_id:1},async()=>{calls++;return true;},{importLease:true,deadlineMs:100,now:()=>200});assert.equal(out.reason,'duration_elapsed');assert.equal(calls,0);
+});

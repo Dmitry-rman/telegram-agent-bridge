@@ -19,11 +19,13 @@ Deployment is manual and platform-specific. The source alone cannot register Sit
 4. Provision a new random `PRIVATE_INGEST_SECRET` of at least 32 characters at both apps. Provision the same new URL-safe `TELEGRAM_WEBHOOK_SECRET` at both apps and the ingress HTTPS `/telegram-webhook` URL as bridge `TELEGRAM_WEBHOOK_URL`.
 5. With explicit owner approval, call `configure_webhook`; review existing webhook conflicts rather than overwriting an unrelated integration. Verify `webhook_status` and a real owner message through native database read → private import (eligible messages returned inline) → reply. This export does not claim that a new deployment round trip has been verified.
 6. Paginate native database reads, pass up to ten non-null pending envelopes at a time to `import_relay_envelopes`, and tolerate safe duplicate imports. Process the import result's `messages` directly; retain inbox reads for recovery. Verify a real Telegram client shows the one-time typing indicator on a new owner text/voice update, and that retries/startup updates do not request it. The inline Bot API method has no success result. No acknowledgment or manual deletion is required; retention removes ciphertext on subsequent accepted ingress. Never expose database access through a public endpoint.
-7. Schedule processing only through your assistant host's supported scheduling capability. No schedule or complete queue-draining daemon is bundled, and no reply-latency guarantee follows from registering the webhook.
+7. Configure an authorized active native transport task to read/import and hand off eligible messages to the existing root. The current reference setup uses no ten-minute automation. The listener is host-native, not a standalone daemon bundled here; registering a webhook does not start it. See [runtime topology](runtime-topology.md).
 
-## Scheduling limitations
+## Listener and wake-up limitations
 
-Check the assistant host’s current scheduling limits before enabling a schedule. For example, a host limited to six scheduled runs per hour permits a nominal ten-minute polling cadence, not per-message or instant wake-up. That is a host-specific constraint, not a universal timer installed by this repository, and scheduler delays can add latency. Bounded long polling helps only while an assistant session is actively running.
+The current integration uses an active host-native transport task, not a ten-minute automation. That task initiates authenticated queue reads and forwards imported messages to root through native collaboration messaging. The webhook does not directly wake root, and queue import is not fully event-driven. Host/task lifecycle and handoff scheduling remain latency and availability boundaries. An inactive listener does not become active merely because D1 received a row. See the [runtime sequence and future-adapter boundary](runtime-topology.md#wake-up-and-latency-what-is-and-is-not-event-driven).
+
+A future deployment may use a separately authorized supported scheduler or event adapter, but neither is installed by this repository. Do not claim continuous availability or instant replies from bounded long polling or Worker `waitUntil` tasks.
 
 ## Build and rollback
 
@@ -36,3 +38,5 @@ Switch back using explicitly authorized `disable_webhook`, which verifies the co
 - [Telegram Bot API](https://core.telegram.org/bots/api): getUpdates, setWebhook, getWebhookInfo, sendMessage and getFile.
 - [Cloudflare D1](https://developers.cloudflare.com/d1/): actual host database limits and migration behavior.
 - Consult your installed OpenAI Sites hosting/identity/MCP instructions for account-specific registration. Do not bypass its private access gateway with a raw Worker URL.
+
+Optional import-time typing requires migration `0004_bored_cerebro.sql` and private-server environment flag `TYPING_ON_IMPORT=true` (default off). Enable only for an importer that immediately forwards messages for actual processing. Respect returned typing lease metadata and rate-limit delays; do not add a second listener renewal loop. This changes neither webhook registration nor credentials. Verify on the target Worker runtime that the execution context reaches the exported handler and bounded post-response actions actually run; Node mocks cannot establish that. A real Workers-runtime regression harness remains a follow-up need, particularly for fetch options and execution-context lifecycle.
