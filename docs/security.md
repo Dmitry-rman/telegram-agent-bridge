@@ -24,3 +24,9 @@ The transcription caller must delete temporary user audio in `finally`, includin
 Run tests before changes. Verify real gateway denial, pairing, webhook retries, idempotent private import and uncertain-send recovery after deploying. Preserve original encryption keys to read existing credentials; changing them blindly can make data unusable. For suspected compromise, use official BotFather/provider secret rotation and review active webhooks. Do not upload runtime state for troubleshooting.
 
 `python3 scripts/check-shareable.py` is a heuristic source-package guard, not a comprehensive secret scanner or a security audit. Manually review the staged files before publishing. Report vulnerabilities privately to the eventual repository owner's chosen security channel; none is configured by this starter.
+
+## Voice-download diagnostics
+
+`get_voice_audio` may read a retained, authenticated owner's voice note even after a reply was attempted, so a failed download can be investigated without deleting outbox state. This does not permit another reply, change retention, or bypass the transcript-write guard. The note must still exist and match the paired owner.
+
+Download failures expose only a controlled stage, numeric HTTP status when received, body/Content-Length validity flags, and a bounded received-byte count. They never expose the bot token, file path, URL, headers, upstream body or upstream exception text. A `fetch` failure has no HTTP status; it must not be described as an HTTP rejection or oversized recording. Known HTTP failure, malformed length, stream failure, actual oversize and empty audio are distinguishable. Missing Content-Length (including chunked responses) is allowed; the streaming byte cap still applies. Local tests are not evidence of the cause of a live failure: inspect one authorized diagnostic result before choosing a remedy.

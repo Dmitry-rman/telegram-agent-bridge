@@ -12,8 +12,15 @@ export async function receive(request,env){
  if(!request.headers.get('content-type')?.toLowerCase().startsWith('application/json'))return response(415);
  try{const update=JSON.parse(await readBounded(request));if(!directOwner(update,env.TELEGRAM_OWNER_ID))return response(200);if(typeof update.message.text!=='string'&&!update.message.voice)return response(200);
   const sealed=await sealEnvelope(env,update);
-  await env.DB.prepare("INSERT OR IGNORE INTO relay_queue(update_id,sealed,state) VALUES(?,?,'pending')").bind(update.update_id,sealed).run();
+  const inserted=await env.DB.prepare("INSERT OR IGNORE INTO relay_queue(update_id,sealed,state) VALUES(?,?,'pending')").bind(update.update_id,sealed).run();
   await expire(env);
+  const message=update.message;
+  const startup=typeof message.text==='string'&&/^\/start(?:@\w+)?(?:\s|$)/i.test(message.text);
+  const text=typeof message.text==='string'&&message.text.trim().length>0;
+  const voice=message.voice&&typeof message.voice.file_id==='string'&&message.voice.file_id.length>0&&typeof message.voice.file_unique_id==='string'&&message.voice.file_unique_id.length>0&&Number.isSafeInteger(message.voice.duration)&&message.voice.duration>=0;
+  // Telegram may execute one Bot API method from the webhook response. This is a
+  // brief initial processing indicator, not a wake-up or a confirmed method result.
+  if(inserted.meta?.changes===1&&!startup&&(text||voice))return Response.json({method:'sendChatAction',chat_id:env.TELEGRAM_OWNER_ID,action:'typing'},{headers:{'cache-control':'no-store','x-content-type-options':'nosniff'}});
   return response(200);
  }catch{return response(503);}
 }
