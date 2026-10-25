@@ -23,6 +23,8 @@ The optional resident ASR supervisor is private local stdio, accepts local file 
 
 ## Operations
 
+Optional [transport diagnostics](latency.md#optional-http-diagnostics) are off unless the private host sets `TRANSPORT_DIAGNOSTICS=true`. Only authenticated owner transport calls create traces. Logs contain random per-call trace IDs, timing, controlled outcomes and numeric HTTP status; they exclude payloads, identities, credentials, URLs and upstream error text. These operational records still reveal activity timing: keep them private, apply the host's log retention policy, and never commit real traces. Background typing records can outlive the tool response; console logging failure does not change delivery or permit a retry.
+
 Run tests before changes. Verify real gateway denial, pairing, webhook retries, idempotent private import and uncertain-send recovery after deploying. Preserve original encryption keys to read existing credentials; changing them blindly can make data unusable. For suspected compromise, use official BotFather/provider secret rotation and review active webhooks. Do not upload runtime state for troubleshooting.
 
 `python3 scripts/check-shareable.py` is a heuristic source-package guard, not a comprehensive secret scanner or a security audit. Manually review the staged files before publishing. Report vulnerabilities privately to the eventual repository owner's chosen security channel; none is configured by this starter.

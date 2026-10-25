@@ -41,6 +41,8 @@ Protocol key-domain constants retain their original version strings for compatib
 
 ### Bounded typing renewal
 
+Optional [HTTP diagnostics](latency.md#optional-http-diagnostics) separate individual chat-action and reply HTTP requests from host tool waiting, and record actual background typing termination. They do not extend a lease or change scheduling.
+
 The private `keep_typing` tool holds one authenticated request for 20 seconds by default (1–25 seconds allowed). It renews `sendChatAction` about every four seconds only for a known owner message without an outbox attempt. The caller must run it concurrently with actual assistant processing, cancel it when processing stops, and start another bounded call only if processing continues. It does not wake the assistant or run after the request ends. Every renewal checks the outbox and stops for sending, sent, or uncertain replies. Cancellation stops further requests; Telegram may display the last action for up to five more seconds. Rate limiting ends the call with `retry_after_seconds`, which callers must honor before another typing action. Unconfirmed actions are not retried within the call. No continuous typing is promised during network failures or between calls.
 
 ### Optional import-time typing

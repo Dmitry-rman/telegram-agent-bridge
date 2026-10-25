@@ -40,15 +40,42 @@ export class Repo {
 function config(env){
  if(!/^\d+:[A-Za-z0-9_-]+$/.test(env.TELEGRAM_BOT_TOKEN||'') || !/^[1-9]\d*$/.test(env.TELEGRAM_OWNER_ID||'')) throw Error('Bridge configuration incomplete');
 }
+// Request-local diagnostic state is created only after owner authentication.
+// Never include tool arguments, identities, URLs, upstream bodies or exception text.
+const transportTrace=Symbol('transportTrace');
+const tracedTools=new Set(['import_relay_envelopes','send_reply','send_typing','keep_typing']);
+function traceEvent(env,event,fields={}){
+ const trace=env[transportTrace];if(!trace)return;
+ const entry={event,at_ms:Date.now(),elapsed_ms:Math.round(performance.now()-trace.started),...fields};
+ if(trace.events.length<64)trace.events.push(entry);
+ try{console.log(JSON.stringify({component:'telegram_transport',trace_id:trace.id,...entry}));}catch{/* Diagnostics must never affect delivery. */}
+}
+function finishTrace(env,failed){
+ const trace=env[transportTrace];
+ traceEvent(env,'handler_end',{outcome:failed?'error':'returned'});
+ return {trace_id:trace.id,handler_started_at_ms:trace.startedAt,handler_elapsed_ms:Math.round(performance.now()-trace.started),events:trace.events.map(event=>({...event})),background_events_in_server_logs:true};
+}
 export async function telegram(env,method,args,fetcher=fetch,options={}){
  config(env);
- let response;
- try { response=await fetcher(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(args),signal:options.signal?AbortSignal.any([options.signal,AbortSignal.timeout(options.timeoutMs||15000)]):AbortSignal.timeout(options.timeoutMs||15000)}); }
- catch {throw Error('Telegram delivery uncertain; do not automatically retry send');}
- let body; try{body=await response.json();}catch{throw Error('Telegram response uncertain');}
- if(response.status===429||body.error_code===429){const error=Error('Telegram rate limited');error.code='RATE_LIMIT';error.retryAfter=Number.isSafeInteger(body.parameters?.retry_after)&&body.parameters.retry_after>0?body.parameters.retry_after:60;throw error;}
- if(!response.ok || !body.ok) throw Error('Telegram request not confirmed');
- return body.result;
+ const trace=env[transportTrace],observed=!!trace&&['sendMessage','sendChatAction'].includes(method);
+ const requestId=observed?++trace.requests:null,started=performance.now();
+ const requestOptions={method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(args),signal:options.signal?AbortSignal.any([options.signal,AbortSignal.timeout(options.timeoutMs||15000)]):AbortSignal.timeout(options.timeoutMs||15000)};
+ let response,httpStatus=null,outcome='fetch_error';
+ if(observed)traceEvent(env,'telegram_http_start',{request_id:requestId,method});
+ try{
+  try {response=await fetcher(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`,requestOptions);}
+  catch {throw Error('Telegram delivery uncertain; do not automatically retry send');}
+  httpStatus=Number.isInteger(response.status)&&response.status>=100&&response.status<=599?response.status:null;
+  if(observed)traceEvent(env,'telegram_http_headers',{request_id:requestId,method,http_status:httpStatus});
+  outcome='invalid_response';
+  let body;try{body=await response.json();}catch{throw Error('Telegram response uncertain');}
+  if(response.status===429||body.error_code===429){outcome='rate_limited';const error=Error('Telegram rate limited');error.code='RATE_LIMIT';error.retryAfter=Number.isSafeInteger(body.parameters?.retry_after)&&body.parameters.retry_after>0?body.parameters.retry_after:60;throw error;}
+  outcome='not_confirmed';
+  if(!response.ok || !body.ok)throw Error('Telegram request not confirmed');
+  outcome='ok';return body.result;
+ }finally{
+  if(observed)traceEvent(env,'telegram_http_end',{request_id:requestId,method,http_status:httpStatus,outcome,duration_ms:Math.round(performance.now()-started)});
+ }
 }
 // Shared by polling and authorized webhook ingest. No media bytes or model calls.
 export async function normalizeOwnerUpdate(env,u){
@@ -183,13 +210,16 @@ export async function reply(env,repo,args,api=telegram){
   if(prior.text!==args.text) throw Error('Reply already reserved with different text');
   return {state:prior.state,message_id:prior.telegram_message_id,notice:prior.state==='sent'?'Already sent':'Never automatically resend an uncertain/sending reply; ask owner to verify Telegram.'};
  }
+ traceEvent(env,'reply_reserved');
  try{
   const sent=await api(env,'sendMessage',{chat_id:incoming.chat_id,text:args.text,reply_parameters:{message_id:incoming.message_id}});
   if(!Number.isSafeInteger(sent?.message_id)) throw Error('Invalid Telegram response');
   await repo.run(SQL.status,'sent',sent.message_id,args.update_id);
+  traceEvent(env,'reply_state_saved',{state:'sent'});
   return {state:'sent',message_id:sent.message_id};
  }catch{
   await repo.run(SQL.status,'uncertain',null,args.update_id);
+  traceEvent(env,'reply_state_saved',{state:'uncertain'});
   return {state:'uncertain',notice:'Delivery is not confirmed. Do not retry automatically; ask owner to verify Telegram.'};
  }
 }
@@ -206,12 +236,14 @@ export async function startImportTyping(env,repo,messages,ctx,runner=keepTyping)
  // Permanent update IDs prevent re-imports from repeatedly extending a spinner.
  const inserted=await repo.run('INSERT OR IGNORE INTO typing_runs(update_id,lease_until,cooldown_until) SELECT ?,?,0 WHERE NOT EXISTS (SELECT 1 FROM typing_runs WHERE lease_until>? OR cooldown_until>?)',message.update_id,until,now,now);
  if(inserted.meta.changes!==1)return {scheduled:false,...(await typingGuard(repo)??{reason:'already_started'})};
+ traceEvent(env,'typing_lease_acquired',{lease_until_ms:until});
  const task=(async()=>{
+  let outcome='completed';
   try{
    const result=await runner(env,repo,{update_id:message.update_id,duration_seconds:20},telegram,{importLease:true,deadlineMs:now+20000});
    if(result.reason==='rate_limited')await repo.run('UPDATE typing_runs SET cooldown_until=? WHERE update_id=?',Date.now()+result.retry_after_seconds*1000,message.update_id);
-  }catch{/* No upstream data or errors leave this bounded background task. */}
-  finally{await repo.run('UPDATE typing_runs SET lease_until=0 WHERE update_id=?',message.update_id);}
+  }catch{outcome='failed';/* No upstream data or errors leave this bounded background task. */}
+  finally{try{await repo.run('UPDATE typing_runs SET lease_until=0 WHERE update_id=?',message.update_id);}catch{outcome='cleanup_failed';}finally{traceEvent(env,'typing_background_end',{outcome});}}
  })();
  // Register the promise on the real execution context; no floating timers or scheduler.
  ctx.waitUntil(task.catch(()=>{}));
@@ -246,7 +278,8 @@ export async function keepTyping(env,repo,args,api=telegram,options={}){
  const now=options.now??Date.now,sleep=options.sleep??typingSleep,deadline=Math.min(now()+duration*1000,options.deadlineMs??Infinity);
  const signal=AbortSignal.any([...(options.signal?[options.signal]:[]),AbortSignal.timeout(Math.max(1,deadline-now()))]);
  let confirmed=0;
- const result=(reason,extra={})=>({reason,confirmed_actions:confirmed,expires_within_seconds:5,...extra});
+ traceEvent(env,'typing_run_start',{mode:options.importLease?'import':'manual',duration_seconds:duration});
+ const result=(reason,extra={})=>{traceEvent(env,'typing_run_end',{reason,confirmed_actions:confirmed});return {reason,confirmed_actions:confirmed,expires_within_seconds:5,...extra};};
  while(now()<deadline){
   if(signal.aborted)return result('cancelled');
   if(!options.importLease){const guard=await typingGuard(repo);if(guard)return {...result(guard.reason),...guard};}
@@ -425,12 +458,20 @@ export async function setup(request,env,api=telegram){
 }
 
 export default {async fetch(request,env,ctx){
+ const requestStarted=performance.now(),requestStartedAt=Date.now();
  if(new URL(request.url).pathname==='/telegram/ingest')return privateIngest(request,env);
  if(new URL(request.url).pathname.startsWith("/setup"))return setup(request,env);
  if(new URL(request.url).pathname!=='/mcp'||request.method!=='POST') return new Response('Private Telegram transport. No webhook or public message endpoint.',{status:404});
  let call;try{call=await request.json();}catch{return new Response('Invalid JSON',{status:400});}
  if(!call||typeof call!=='object'||Array.isArray(call)||call.jsonrpc!=='2.0'||typeof call.method!=='string')return Response.json({jsonrpc:'2.0',id:null,error:{code:-32600,message:'Invalid request'}},{status:400});
- const json=x=>Response.json({jsonrpc:'2.0',id:call.id??null,...x});
+ const json=x=>{
+  if(env[transportTrace]){
+   const diagnostic=finishTrace(env,!!x.result?.isError);
+   if(x.result?.isError)x.result.content.push({type:'text',text:JSON.stringify({transport_diagnostics:diagnostic})});
+   else if(x.result?.content?.[0]){const value=JSON.parse(x.result.content[0].text);value.transport_diagnostics=diagnostic;x.result.content[0].text=JSON.stringify(value);}
+  }
+  return Response.json({jsonrpc:'2.0',id:call.id??null,...x});
+ };
  if(call.method==='server/discover')return json({result:{supportedVersions:['2026-07-28'],capabilities:{tools:{}}}});
  if(call.method==='tools/list')return json({result:{tools:toolList}});
  if(call.method!=='tools/call')return json({error:{code:-32601,message:'Method not found'}});
@@ -441,6 +482,10 @@ export default {async fetch(request,env,ctx){
   if(call.params?.name==='bridge_identity')result={site_user_id:id};
   else{
    if(!env.SITE_OWNER_ID||id!==env.SITE_OWNER_ID)throw Error('Owner access required');
+   if(env.TRANSPORT_DIAGNOSTICS==='true'&&tracedTools.has(call.params?.name)){
+    env={...env,[transportTrace]:{id:crypto.randomUUID(),started:requestStarted,startedAt:requestStartedAt,requests:0,events:[]}};
+    traceEvent(env,'handler_start',{tool:call.params.name,handler_started_at_ms:requestStartedAt});
+   }
    if(call.params?.name==='bridge_status')result=await bridgeStatus(env);
    else if(call.params?.name==='verify_owner')result=await verifyOwner(env);
    else if(call.params?.name==='relay_configuration')result={telegram_owner_id:(await runtime(env)).TELEGRAM_OWNER_ID};

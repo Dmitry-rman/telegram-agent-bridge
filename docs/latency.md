@@ -18,6 +18,32 @@ In the existing host listener, record monotonic durations for native queue read,
 
 The listener still owns durable pagination, restart recovery and host handoff. A committed import is safe to repeat; do not automatically repeat root side effects merely because delivery to root is ambiguous. An uncertain Telegram send stays blocked.
 
+## Optional HTTP diagnostics
+
+Set `TRANSPORT_DIAGNOSTICS=true` in the private bridge's host configuration to diagnose one controlled exchange. The default is off; tool arguments cannot enable it. This flag does not accelerate delivery or extend typing. Disable it after collecting the measurements.
+
+Authenticated owner calls to `import_relay_envelopes`, `send_reply`, `send_typing` and `keep_typing` then return an additive `transport_diagnostics` object. On tool errors it appears in a second text content block, preserving the original error. Each call gets a random `trace_id`. Structured console records with `component=telegram_transport` carry the same ID. Different tool calls have different IDs; correlate their sequence privately in the host.
+
+| Event / field | Boundary measured |
+| --- | --- |
+| `handler_started_at_ms` | Worker entry, before request parsing and owner authentication |
+| `handler_start` | Trace enabled after owner authentication |
+| `reply_reserved` | Durable outbox reservation completed |
+| `telegram_http_start` | Immediately before calling fetch for `sendMessage` or `sendChatAction` |
+| `telegram_http_headers` | Fetch resolved with response headers |
+| `telegram_http_end` | Response body parsed, or request failed; includes safe outcome, HTTP status and duration |
+| `reply_state_saved` | Durable `sent` or `uncertain` state saved |
+| `typing_lease_acquired` | Background typing lease acquired, including its expiration |
+| `typing_run_start` / `typing_run_end` | Typing loop started / returned, including stop reason and confirmed action count |
+| `typing_background_end` | Background task reached its cleanup end, including on failure |
+| `handler_end` | Tool result ready, before final response serialization and host receipt |
+
+`at_ms` values are Unix timestamps in milliseconds (UTC). `elapsed_ms`, `duration_ms` and `handler_elapsed_ms` use the worker's monotonic clock. `request_id` distinguishes HTTP requests within one trace. The returned event list is a snapshot, capped at 64 entries. Background typing can continue after that response; its later events are available only in server logs under the import's trace ID. A lease expiration is not the actual time of the final chat action. HTTP success also does not measure when the Telegram client displays the message.
+
+Collect the tool's start/end times, its diagnostic object and corresponding private console records. Compare full tool duration with `handler_elapsed_ms` to estimate time outside the worker; the difference cannot separate host dispatch from return transport. Use `telegram_http_start` to `telegram_http_end` for the actual HTTP operation, and `reply_state_saved` to identify subsequent database delay. Keep a machine timestamp for handoff to the existing assistant: this happens outside the bridge. Cross-machine timestamp comparisons require synchronized clocks; monotonic durations do not.
+
+These diagnostics cover private bridge HTTP calls only. The ingress's inline webhook `sendChatAction` response has no Telegram confirmation available to this worker and is not measured here. No message text, token, owner/chat/update/message ID, request URL, upstream response body or exception text is logged. Keep trace records and real exchange histories outside the public repository and use the host's private log retention controls. Local mocked tests verify boundaries and redaction, not production latency.
+
 ## Compatibility and recovery
 
 No database migration, secret change or webhook re-registration is required for these changes. Existing pairing, encryption domains, receipts and outbox reservations remain in place. Malformed envelope structure rejects the request before writes; cryptographically invalid/foreign envelopes appear in `failed_update_ids` while valid envelopes commit together. A database failure rolls back all writes in that import and produces an error; safely re-import after resolving the failure.
