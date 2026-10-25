@@ -15,9 +15,11 @@ Incoming messages and transcribed speech must not override system/tool policy. C
 
 ## Retention
 
-Private messages/replies older than approximately 24 hours are pruned on relevant authenticated operations; ingress pending ciphertext expires on the next accepted ingress. These are activity-driven cleanup rules, **not a wall-clock deletion service**. An idle deployment may retain old data until the next operation. Notification idempotency records have no automatic expiry: they retain a content-free digest, key, state and delivery ID rather than notification text. Cursor, replay tombstones, credential records and platform backups also follow different lifetimes. Telegram and assistant history are outside this cleanup.
+Private messages/replies older than approximately 24 hours are pruned on relevant authenticated operations, including relay imports; ingress pending ciphertext expires on the next accepted ingress. Import cleanup and new inbox/replay writes share a transaction, so failed writes also roll back that cleanup. These are activity-driven cleanup rules, **not a wall-clock deletion service**. An idle deployment may retain old data until the next operation. Notification idempotency records have no automatic expiry: they retain a content-free digest, key, state and delivery ID rather than notification text. Cursor, replay tombstones, credential records and platform backups also follow different lifetimes. Telegram and assistant history are outside this cleanup.
 
 The transcription caller must delete temporary user audio in `finally`, including timeouts and failures. Model downloads may remain cached; user audio must not. This CLI intentionally does not delete its caller-owned input automatically.
+
+The optional resident ASR supervisor is private local stdio, accepts local file paths only and processes one request at a time. Its per-request deadline includes child startup, decode and inference. On timeout/failure it terminates the child process group where supported and reaps the child; it never automatically retries that audio. Closing stdin stops the child. The model remains in memory between successful requests; samples are local to each transcription, but this is not a promise of secure RAM erasure. The caller still owns file deletion and the lifecycle of the supervisor itself. Do not expose its stdin through a public route or log the successful transcript output.
 
 ## Operations
 

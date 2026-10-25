@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 class RunnerTests(unittest.TestCase):
     def load(self, sample_count=16000):
@@ -47,6 +47,28 @@ class RunnerTests(unittest.TestCase):
             with patch.object(module.subprocess, "run", return_value=SimpleNamespace(stdout=b"")):
                 with self.assertRaises(ValueError):
                     module.transcribe(file.name)
+
+    def test_supplied_warm_model_is_reused_without_loading_again(self):
+        module = self.load()
+        model = SimpleNamespace(transcribe=Mock(return_value=([SimpleNamespace(text=' actual text ')], SimpleNamespace(language='ru'))))
+        with tempfile.NamedTemporaryFile() as file:
+            file.write(b'synthetic'); file.flush()
+            with patch.object(module, 'load_model') as load, patch.object(module.subprocess, 'run', return_value=SimpleNamespace(stdout=b'')):
+                for _ in range(2):
+                    self.assertEqual(module.transcribe(file.name, 'ru', model=model)['text'], 'actual text')
+                load.assert_not_called()
+        self.assertEqual(model.transcribe.call_count, 2)
+        self.assertEqual(model.transcribe.call_args.kwargs['language'], 'ru')
+
+    def test_empty_or_oversized_transcript_rejected_before_bridge_submission(self):
+        module = self.load()
+        for text in ['', 'x' * 16001]:
+            model = SimpleNamespace(transcribe=lambda *a, **k: ([SimpleNamespace(text=text)], SimpleNamespace(language='en')))
+            with tempfile.NamedTemporaryFile() as file:
+                file.write(b'synthetic'); file.flush()
+                with patch.object(module.subprocess, 'run', return_value=SimpleNamespace(stdout=b'')):
+                    with self.assertRaisesRegex(ValueError, 'Transcript'):
+                        module.transcribe(file.name, model=model)
 
 if __name__ == "__main__":
     unittest.main()

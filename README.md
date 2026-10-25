@@ -28,7 +28,7 @@ Both Workers run on Cloudflare infrastructure through separate OpenAI Sites depl
 | --- | --- |
 | `apps/bridge` | Private setup/pairing, durable inbox/outbox, owner-only MCP tools, Telegram replies and voice retrieval |
 | `apps/telegram-ingress` | Optional public secret-checked webhook, write-only encrypted durable queue; reads use the hosting provider’s authenticated native database connector |
-| `services/transcription` | Bounded CPU Whisper CLI; no network during inference |
+| `services/transcription` | Bounded CPU Whisper CLI and optional resident stdio worker; no network during inference |
 | `docs` | Architecture, adapter contract, deployment, security and voice guidance |
 | `scripts` | Explicit model provisioning and shareability checks |
 
@@ -58,6 +58,8 @@ Agent contributors: start with [AGENTS.md](AGENTS.md).
 
 See [architecture](docs/architecture.md), [provider adapter contract](docs/provider-adapters.md), [security](docs/security.md), and [voice setup](services/transcription/README.md).
 
+For latency improvements, importer timing fields, resident ASR and an owner-triggered update procedure after GitHub CI, see [latency and updates](docs/latency.md). Nothing automatically deploys or restarts a running integration.
+
 ## Sharing and license
 
 Create your own Git repository from this folder. Build/test commands do not commit, push, publish, deploy or register a live bot. Repository publication is a separate owner-authorized action. `.env.example` files contain only placeholders; real `.env*`, local hosting manifests, databases, audio and weights are excluded.
@@ -73,3 +75,7 @@ Licensed under the [MIT License](LICENSE), preserving the repository owner’s e
 - Plaintext message/transcript storage exists in the private inbox; only credentials, voice metadata and relay envelopes have application-level encryption.
 - Voice accuracy and CPU time vary; this export has offline unit coverage, not a new live Telegram/hosting end-to-end certification.
 - Fresh online installation of the exported upstream transcription dependency set must be validated on the target OS. Models and ffmpeg are installed separately.
+
+## Support
+
+For help deploying on OpenAI dots, contact [@kdimitry on Telegram](https://t.me/kdimitry).

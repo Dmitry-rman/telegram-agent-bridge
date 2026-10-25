@@ -7,7 +7,10 @@ import numpy as np
 from faster_whisper import WhisperModel
 ROOT=Path(__file__).resolve().parent
 MODEL=ROOT/'models/models--Systran--faster-whisper-base/snapshots/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66'
-def transcribe(path,language=None):
+def load_model():
+    return WhisperModel(str(MODEL),device='cpu',compute_type='int8',cpu_threads=2,num_workers=1,local_files_only=True)
+
+def transcribe(path,language=None,model=None):
     path=Path(path).resolve(strict=True)
     if not path.is_file() or not 0<path.stat().st_size<=20_000_000:
         raise ValueError('Input must be a local audio file of 1..20000000 bytes')
@@ -17,9 +20,12 @@ def transcribe(path,language=None):
     if not 0<len(samples)<=300*16000:
         raise ValueError('Audio must be nonempty and no longer than five minutes')
     start=time.monotonic()
-    model=WhisperModel(str(MODEL),device='cpu',compute_type='int8',cpu_threads=2,num_workers=1,local_files_only=True)
+    if model is None:
+        model=load_model()
     segments,info=model.transcribe(samples,beam_size=1,language=language,vad_filter=False)
     text=' '.join(s.text.strip() for s in segments)
+    if not text or len(text)>16000:
+        raise ValueError('Transcript must contain 1..16000 characters')
     return {'text':text,'language':info.language,'duration_seconds':len(samples)/16000,'elapsed_seconds':round(time.monotonic()-start,2),'source':'offline-whisper-base','untrusted_channel_content':True}
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('path');parser.add_argument('--language',default=None);args=parser.parse_args()
