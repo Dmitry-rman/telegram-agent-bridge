@@ -34,3 +34,7 @@ Protocol key-domain constants retain their original version strings for compatib
 ### Webhook response limitation
 
 [Telegram supports Bot API methods in webhook responses](https://core.telegram.org/bots/api#making-requests-when-getting-updates), but does not report whether that inline method succeeded. Tests verify the response contract and durability ordering, not the Telegram client display. Confirm the indicator in a real client after deployment; do not claim verified typing from HTTP200 alone.
+
+### Bounded typing renewal
+
+The private `keep_typing` tool holds one authenticated request for 20 seconds by default (1–25 seconds allowed). It renews `sendChatAction` about every four seconds only for a known owner message without an outbox attempt. The caller must run it concurrently with actual assistant processing, cancel it when processing stops, and start another bounded call only if processing continues. It does not wake the assistant or run after the request ends. Every renewal checks the outbox and stops for sending, sent, or uncertain replies. Cancellation stops further requests; Telegram may display the last action for up to five more seconds. Rate limiting ends the call with `retry_after_seconds`, which callers must honor before another typing action. Unconfirmed actions are not retried within the call. No continuous typing is promised during network failures or between calls.
