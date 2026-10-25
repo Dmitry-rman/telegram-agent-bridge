@@ -64,6 +64,8 @@ For latency improvements, importer timing fields, resident ASR and an owner-trig
 
 To avoid repeatedly reading old queue pages, see [arrival sequences and durable listener checkpoints](docs/queue-reading.md). This requires an ingress migration and an update to the host-native listener; the repository does not install that listener. Optional [typing settings](docs/latency.md#typing-feedback-under-host-delays) help avoid an early indicator during host waiting.
 
+For generated PNG/JPEG replies, see [image sending and host byte-transfer requirements](docs/images.md). The private `send_photo_reply` tool uploads actual file bytes to Telegram with an optional caption; it requires a private bridge migration and the existing host's ability to pass those bytes. Choose a text or photo reply for each incoming message.
+
 ## Sharing and license
 
 Create your own Git repository from this folder. Build/test commands do not commit, push, publish, deploy or register a live bot. Repository publication is a separate owner-authorized action. `.env.example` files contain only placeholders; real `.env*`, local hosting manifests, databases, audio and weights are excluded.

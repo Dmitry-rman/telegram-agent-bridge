@@ -8,6 +8,8 @@ For an already running integration, GitHub CI only tests the pushed source. The 
 
 ## Private bridge first
 
+Image replies on an existing installation require private bridge migration `0005_photo_reply.sql` before invoking the updated `send_photo_reply` tool. Refresh cached MCP discovery after deploying the Worker, and verify the host can pass the generator's actual file bytes within its tool gateway limits. This is separate from ingress migration `0001_relay_order.sql`. See [image reply setup and verification](images.md); no new secrets or webhook changes are required.
+
 1. Register your own **private** hosting project with a D1 database bound as `DB`. Use the exported `worker/index.js` / built `dist/server/index.js`.
 2. Initialize a fresh database with `schema.sql` or let the platform apply the complete migrations. Keep existing deployments on their migration history.
 3. Configure `SITE_ORIGIN` as the canonical HTTPS origin and `SITE_OWNER_ID` from the authenticated `bridge_identity` tool. Identity discovery reports the caller only; all data tools fail closed until owner configuration matches.

@@ -1,0 +1,1 @@
+ALTER TABLE `outbox` ADD `kind` text DEFAULT 'text' NOT NULL;

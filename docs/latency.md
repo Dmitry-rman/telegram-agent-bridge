@@ -23,14 +23,14 @@ The listener still owns durable pagination, restart recovery and host handoff. A
 
 Set `TRANSPORT_DIAGNOSTICS=true` in the private bridge's host configuration to diagnose one controlled exchange. The default is off; tool arguments cannot enable it. This flag does not accelerate delivery or extend typing. Disable it after collecting the measurements.
 
-Authenticated owner calls to `import_relay_envelopes`, `send_reply`, `send_typing` and `keep_typing` then return an additive `transport_diagnostics` object. On tool errors it appears in a second text content block, preserving the original error. Each call gets a random `trace_id`. Structured console records with `component=telegram_transport` carry the same ID. Different tool calls have different IDs; correlate their sequence privately in the host.
+Authenticated owner calls to `import_relay_envelopes`, `send_reply`, `send_photo_reply`, `send_typing` and `keep_typing` then return an additive `transport_diagnostics` object. On tool errors it appears in a second text content block, preserving the original error. Each call gets a random `trace_id`. Structured console records with `component=telegram_transport` carry the same ID. Different tool calls have different IDs; correlate their sequence privately in the host.
 
 | Event / field | Boundary measured |
 | --- | --- |
 | `handler_started_at_ms` | Worker entry, before request parsing and owner authentication |
 | `handler_start` | Trace enabled after owner authentication |
 | `reply_reserved` | Durable outbox reservation completed |
-| `telegram_http_start` | Immediately before calling fetch for `sendMessage` or `sendChatAction` |
+| `telegram_http_start` | Immediately before calling fetch for `sendMessage`, `sendPhoto` or `sendChatAction` |
 | `telegram_http_headers` | Fetch resolved with response headers |
 | `telegram_http_end` | Response body parsed, or request failed; includes safe outcome, HTTP status and duration |
 | `reply_state_saved` | Durable `sent` or `uncertain` state saved |

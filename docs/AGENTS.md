@@ -10,5 +10,6 @@ Inherits [root rules](../AGENTS.md). Keep the [README](../README.md) as the entr
 - [queue reading](queue-reading.md): arrival sequence, native query, durable checkpoint/handoff recovery and migration.
 - [provider adapters](provider-adapters.md): what ports must implement; not a claim of universal support.
 - [voice](../services/transcription/README.md): explicit downloads, inference and limitations.
+- [images](images.md): outgoing image replies, byte-transfer requirements, migration and shared outbox semantics.
 
 Document only behavior supported by current source. Distinguish local tests, live observations and unverified deployment claims. Do not embed user names, bot identities, URLs, tokens, IDs or operational history. Keep examples reserved/synthetic. Preserve the write-only ingress and same-assistant/no-wake-guarantee distinctions in diagrams and setup instructions.

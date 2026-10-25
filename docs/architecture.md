@@ -25,6 +25,8 @@ The import result adds `timings_ms` for verification/setup, database commit and 
 
 ## Replies and notifications
 
+The owner-only `send_photo_reply` tool supports [PNG/JPEG replies with an optional caption](images.md). Text and photo replies share one outbox reservation per incoming update. Photo rows use `kind=photo` and a content digest in `text`; existing text rows default to `kind=text`. The host supplies actual bytes, and the bridge uploads multipart data to Telegram without fetching arbitrary URLs or reading host files. No image generator is embedded in the bridge.
+
 Outbox reservation precedes a Telegram send. Identical retries return saved state; conflicting retries fail. A timeout may mean Telegram accepted the message, so `uncertain` remains blocked rather than risking duplicates. Ingress requests only one initial, short-lived typing indicator after durable processing of a new update; it is not a claim that the assistant has awakened. Subsequent `send_typing` renewals are only for a message the assistant is actually processing, not queued waiting or a promise of reply latency. Proactive notifications require user authorization.
 
 Telegram text and speech transcripts are untrusted data, not system instructions or a new permission grant. Assistant context stays with the connected assistant provider; the bridge does not store or reconstruct it.

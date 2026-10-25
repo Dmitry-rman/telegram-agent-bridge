@@ -7,7 +7,7 @@ export const inbox=sqliteTable('inbox',{
  updateId:integer('update_id').primaryKey(),messageId:integer('message_id').notNull(),chatId:text('chat_id').notNull(),text:text('text').notNull(),kind:text('kind').notNull().default('text'),voiceDuration:integer('voice_duration'),voiceSealed:text('voice_sealed'),createdAt:integer('created_at').notNull().default(sql`(unixepoch())`)
 });
 export const outbox=sqliteTable('outbox',{
- updateId:integer('update_id').primaryKey().references(()=>inbox.updateId),text:text('text').notNull(),state:text('state').notNull(),telegramMessageId:integer('telegram_message_id')
+ updateId:integer('update_id').primaryKey().references(()=>inbox.updateId),text:text('text').notNull(),state:text('state').notNull(),telegramMessageId:integer('telegram_message_id'),kind:text('kind').notNull().default('text')
 },t=>[check('reply_state',sql`${t.state} IN ('sending','sent','uncertain')`)]);
 export const credentials=sqliteTable('credentials',{id:integer('id').primaryKey(),sealed:text('sealed').notNull()},t=>[check('credential_singleton',sql`${t.id}=1`)]);
 export const notifications=sqliteTable('notifications',{
