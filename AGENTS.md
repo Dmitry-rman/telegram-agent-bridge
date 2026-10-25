@@ -6,6 +6,8 @@ This monorepo connects Telegram to the **same existing assistant**, not a replac
 
 ## Map
 
+For a new owner, start with the [owner/agent onboarding runbook](docs/onboarding.md), including capability gates and unsupported-reset stop conditions. Never request bot tokens or pairing challenges in chat.
+
 - [Private bridge](apps/bridge/AGENTS.md): pairing, inbox/outbox, MCP, replies and voice metadata.
 - [Write-only ingress](apps/telegram-ingress/AGENTS.md): optional public webhook → encrypted queue.
 - [Transcription](services/transcription/AGENTS.md): optional offline Python CLI.

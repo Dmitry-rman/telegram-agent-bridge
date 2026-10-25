@@ -48,6 +48,8 @@ There is no standalone HTTP development server: the exported Workers need a D1-c
 
 ## Connect your assistant
 
+New owner or assisting agent? Follow the [step-by-step onboarding runbook](docs/onboarding.md): create your own bot, prepare private setup, enter credentials safely, pair, connect tools and verify the actual transport.
+
 1. Deploy the private bridge using your own hosting registration and secret store.
 2. Configure the verified platform owner and expected bot username; pair through private `/setup`.
 3. Connect that bridge's MCP tools to the **same assistant session/context** you want to use.

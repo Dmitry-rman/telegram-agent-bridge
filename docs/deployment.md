@@ -1,5 +1,7 @@
 # Deployment guide
 
+For a new owner and assisting agent, begin with the [onboarding runbook](onboarding.md). This page is the technical hosting reference, not a request to collect credentials in chat.
+
 Deployment is manual and platform-specific. The source alone cannot register Sites projects. Use the current official hosting tools for your account; no production project identifier is included. `hosting.example.json` is a conceptual checklist, **not** a native hosting manifest.
 
 For an already running integration, GitHub CI only tests the pushed source. The owner separately instructs the existing host assistant to roll out a reviewed commit and restart the affected components. See [latency and owner-triggered updates](latency.md) for compatibility, timing fields and optional resident ASR. Updating code does not itself change secrets, register webhooks or install a schedule.

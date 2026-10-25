@@ -2,6 +2,7 @@
 
 Inherits [root rules](../AGENTS.md). Keep the [README](../README.md) as the entrypoint; link detailed material rather than duplicating rules.
 
+- [onboarding](onboarding.md): owner/agent setup sequence, secure token entry, capability gates, verification and recovery stop conditions.
 - [runtime topology](runtime-topology.md): execution locations, native listener/root handoff, wake-up and latency boundaries.
 - [architecture](architecture.md): message paths, persistence and failure behavior.
 - [security](security.md): threat boundaries, permissions and retention.
