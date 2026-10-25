@@ -6,6 +6,7 @@ Inherits [root rules](../AGENTS.md). Keep the [README](../README.md) as the entr
 - [architecture](architecture.md): message paths, persistence and failure behavior.
 - [security](security.md): threat boundaries, permissions and retention.
 - [deployment](deployment.md): owner-operated setup, verification and rollback.
+- [queue reading](queue-reading.md): arrival sequence, native query, durable checkpoint/handoff recovery and migration.
 - [provider adapters](provider-adapters.md): what ports must implement; not a claim of universal support.
 - [voice](../services/transcription/README.md): explicit downloads, inference and limitations.
 

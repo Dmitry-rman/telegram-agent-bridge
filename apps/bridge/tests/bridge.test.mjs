@@ -102,3 +102,30 @@ test('import typing persists rate-limit cooldown and failure releases lease with
 test('import typing absolute deadline cannot outlive its durable lease after slow setup',async()=>{
  const {keepTyping}=await import('../worker/index.js');const r=new Repo(db());await poll(env,r,async()=>[message(1)]);let calls=0;const out=await keepTyping(env,r,{update_id:1},async()=>{calls++;return true;},{importLease:true,deadlineMs:100,now:()=>200});assert.equal(out.reason,'duration_elapsed');assert.equal(calls,0);
 });
+
+test('configured import typing duration stays bounded and reserves cleanup margin',async()=>{
+ const {startImportTyping}=await import('../worker/index.js');
+ for(const seconds of ['1','25']){
+  const r=new Repo(db());await poll(env,r,async()=>[message(1)]);
+  const tasks=[],ctx={waitUntil(p){tasks.push(p);}};let release,deadline;
+  const held=new Promise(resolve=>{release=resolve;});
+  const result=await startImportTyping({...env,TYPING_ON_IMPORT:'true',IMPORT_TYPING_SECONDS:seconds},r,[{update_id:1}],ctx,async(e,repo,args,api,options)=>{
+   assert.equal(args.duration_seconds,Number(seconds));deadline=options.deadlineMs;
+   await held;return {reason:'duration_elapsed'};
+  });
+  assert.equal(result.duration_seconds,Number(seconds));assert.equal(result.lease_until_ms-deadline,5000);
+  const lease=await r.first('SELECT lease_until FROM typing_runs');assert.equal(lease.lease_until,result.lease_until_ms);
+  release();await Promise.all(tasks);
+ }
+});
+
+test('invalid import typing configuration schedules nothing and preserves imported message',async()=>{
+ const {startImportTyping}=await import('../worker/index.js');
+ for(const value of ['0','26','1.5','25seconds','',' 25','025']){
+  const r=new Repo(db());await poll(env,r,async()=>[message(1)]);
+  const result=await startImportTyping({...env,TYPING_ON_IMPORT:'true',IMPORT_TYPING_SECONDS:value},r,[{update_id:1}],{waitUntil(){assert.fail('No background task');}},async()=>assert.fail('No Telegram call'));
+  assert.equal(result.reason,'invalid_duration_configuration');
+  assert.equal((await r.first('SELECT COUNT(*) AS n FROM typing_runs')).n,0);
+  assert.equal((await r.first(SQL.incoming,1)).update_id,1);
+ }
+});

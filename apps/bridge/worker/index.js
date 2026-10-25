@@ -232,7 +232,9 @@ export async function startImportTyping(env,repo,messages,ctx,runner=keepTyping)
  if(env.TYPING_ON_IMPORT!=='true')return {scheduled:false,reason:'disabled'};
  if(typeof ctx?.waitUntil!=='function')return {scheduled:false,reason:'execution_context_unavailable'};
  const message=messages.at(-1);if(!message)return {scheduled:false,reason:'no_eligible_message'};
- const now=Date.now(),until=now+25000;
+ const rawDuration=env.IMPORT_TYPING_SECONDS??'20';
+ if(!/^(?:[1-9]|1\d|2[0-5])$/.test(rawDuration))return {scheduled:false,reason:'invalid_duration_configuration'};
+ const duration=Number(rawDuration),now=Date.now(),until=now+(duration+5)*1000;
  // Permanent update IDs prevent re-imports from repeatedly extending a spinner.
  const inserted=await repo.run('INSERT OR IGNORE INTO typing_runs(update_id,lease_until,cooldown_until) SELECT ?,?,0 WHERE NOT EXISTS (SELECT 1 FROM typing_runs WHERE lease_until>? OR cooldown_until>?)',message.update_id,until,now,now);
  if(inserted.meta.changes!==1)return {scheduled:false,...(await typingGuard(repo)??{reason:'already_started'})};
@@ -240,14 +242,14 @@ export async function startImportTyping(env,repo,messages,ctx,runner=keepTyping)
  const task=(async()=>{
   let outcome='completed';
   try{
-   const result=await runner(env,repo,{update_id:message.update_id,duration_seconds:20},telegram,{importLease:true,deadlineMs:now+20000});
+   const result=await runner(env,repo,{update_id:message.update_id,duration_seconds:duration},telegram,{importLease:true,deadlineMs:now+duration*1000});
    if(result.reason==='rate_limited')await repo.run('UPDATE typing_runs SET cooldown_until=? WHERE update_id=?',Date.now()+result.retry_after_seconds*1000,message.update_id);
   }catch{outcome='failed';/* No upstream data or errors leave this bounded background task. */}
   finally{try{await repo.run('UPDATE typing_runs SET lease_until=0 WHERE update_id=?',message.update_id);}catch{outcome='cleanup_failed';}finally{traceEvent(env,'typing_background_end',{outcome});}}
  })();
  // Register the promise on the real execution context; no floating timers or scheduler.
  ctx.waitUntil(task.catch(()=>{}));
- return {scheduled:true,update_id:message.update_id,duration_seconds:20,lease_until_ms:until,notice:'Do not renew typing while this lease is active. Best-effort bounded processing indicator, not proof of assistant wake-up.'};
+ return {scheduled:true,update_id:message.update_id,duration_seconds:duration,lease_until_ms:until,notice:'Do not renew typing while this lease is active. Best-effort bounded processing indicator, not proof of assistant wake-up.'};
 }
 export async function sendTyping(env,repo,args,api=telegram){
  config(env);if(!Number.isSafeInteger(args.update_id)||args.update_id<0)throw Error('Invalid update id');

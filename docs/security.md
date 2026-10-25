@@ -19,6 +19,8 @@ Private messages/replies older than approximately 24 hours are pruned on relevan
 
 The transcription caller must delete temporary user audio in `finally`, including timeouts and failures. Model downloads may remain cached; user audio must not. This CLI intentionally does not delete its caller-owned input automatically.
 
+Ingress arrival-order rows contain a sequence and Telegram update ID, without ciphertext or plaintext, and remain alongside replay tombstones. Private listener checkpoints and pending handoffs are separate host state: storing an import result for handoff recovery can retain message text/transcripts. Keep that state private, apply bounded retention and never commit it. The queue-reading contract adds no public read or acknowledgment endpoint.
+
 The optional resident ASR supervisor is private local stdio, accepts local file paths only and processes one request at a time. Its per-request deadline includes child startup, decode and inference. On timeout/failure it terminates the child process group where supported and reaps the child; it never automatically retries that audio. Closing stdin stops the child. The model remains in memory between successful requests; samples are local to each transcription, but this is not a promise of secure RAM erasure. The caller still owns file deletion and the lifecycle of the supervisor itself. Do not expose its stdin through a public route or log the successful transcript output.
 
 ## Operations
