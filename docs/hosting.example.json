@@ -1,0 +1,15 @@
+{
+  "notice": "Provider-neutral checklist, NOT an OpenAI hosting manifest or a deployable configuration. Generate native hosting configuration after registering your own projects.",
+  "bridge": {
+    "entrypoint": "apps/bridge/dist/server/index.js",
+    "visibility": "private",
+    "databaseBinding": "DB",
+    "identity": "trusted authenticated owner boundary required"
+  },
+  "telegramIngress": {
+    "entrypoint": "apps/telegram-ingress/dist/server/index.js",
+    "publicRoute": "POST /telegram-webhook",
+    "databaseBinding": "DB",
+    "identity": "write-only webhook; database reads through authenticated native hosting connector only"
+  }
+}

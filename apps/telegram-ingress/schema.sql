@@ -1,0 +1,1 @@
+CREATE TABLE relay_queue(update_id INTEGER PRIMARY KEY,sealed TEXT,state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','acked','expired')),received_at INTEGER NOT NULL DEFAULT (unixepoch()));
