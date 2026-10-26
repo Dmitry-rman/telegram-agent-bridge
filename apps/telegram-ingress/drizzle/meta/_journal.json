@@ -15,6 +15,13 @@
       "when": 1792948113091,
       "tag": "0001_relay_order",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792999529657,
+      "tag": "0002_relay_chunks",
+      "breakpoints": true
     }
   ]
 }
